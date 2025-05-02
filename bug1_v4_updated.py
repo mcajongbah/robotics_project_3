@@ -46,16 +46,6 @@ class Point(object):
         self.z = None
 
 
-def stop(px):
-    """
-    Stops the robot by setting both motor speeds to zero.
-    
-    Args:
-        px (Picarx): Instance controlling the robot.
-    """
-    px.set_motor_speed(1, 0)
-    px.set_motor_speed(2, 0)
-
 # ======= TODO =======
 # Define additional movement functions, e.g.:
 # - turn(direction, angle)
@@ -65,38 +55,44 @@ def stop(px):
 # - move_backward()
 # These methods should control the robot's motors accordingly.
 # =====================
-def turn(px, direction, speed=30):
-    """Spin in place. direction: 'left' or 'right'."""
-    if direction.lower() == 'left':
-        px.set_motor_speed(1, -speed)
-        px.set_motor_speed(2,  speed)
-    else:
-        px.set_motor_speed(1,  speed)
-        px.set_motor_speed(2, -speed)
-
+# ======= MOVEMENT PRIMITIVES (using Picarx API) =======
+def stop(px):
+    """Halt the wheels."""
+    px.stop()
 
 def move_forward(px, speed=20):
-    """Drive straight ahead."""
-    px.set_motor_speed(1,  speed)
-    px.set_motor_speed(2,  speed)
-
+    """Drive straight ahead, zero steering offset."""
+    px.set_dir_servo_angle(0)
+    px.forward(speed)
 
 def move_backward(px, speed=20):
     """Back up in a straight line."""
-    px.set_motor_speed(1, -speed)
-    px.set_motor_speed(2, -speed)
+    px.set_dir_servo_angle(0)
+    px.backward(speed)
 
+def turn(px, direction, speed=20, duration=0.3, angle=35):
+    # steer to one side
+    if direction.lower() == 'left':
+        px.set_dir_servo_angle(-angle)
+    else:
+        px.set_dir_servo_angle(angle)
+    # give it some throttle
+    px.forward(speed)
+    time.sleep(duration)
+    # then stop and straighten out
+    px.forward(0)
+    px.set_dir_servo_angle(0)
 
-def move_left(px, speed=15):
-    """Drift left: slow left wheel, fast right wheel."""
-    px.set_motor_speed(1, speed // 2)
-    px.set_motor_speed(2, speed)
+def move_left(px, speed=20, angle=15):
+    """Drift left: slight left lock while moving forward."""
+    px.set_dir_servo_angle(-angle)
+    px.forward(speed)
 
-
-def move_right(px, speed=15):
-    """Drift right: fast left wheel, slow right wheel."""
-    px.set_motor_speed(1, speed)
-    px.set_motor_speed(2, speed // 2)
+def move_right(px, speed=20, angle=15):
+    """Drift right: slight right lock while moving forward."""
+    px.set_dir_servo_angle(angle)
+    px.forward(speed)
+# =======================
 
 
 def readLine(white_line=0):

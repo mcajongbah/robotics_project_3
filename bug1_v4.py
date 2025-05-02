@@ -53,7 +53,6 @@ def stop(px):
     px.set_motor_speed(1, 0)
     px.set_motor_speed(2, 0)
 
-# ======= TODO =======
 # Define additional movement functions, e.g.:
 # - turn(direction, angle)
 # - move_left()
@@ -61,7 +60,66 @@ def stop(px):
 # - move_forward()
 # - move_backward()
 # These methods should control the robot's motors accordingly.
-# =====================
+
+def turn(px, direction, angle):
+    """
+    Turns the robot in the specified direction by the given angle.
+    
+    Args:
+        px (Picarx): Instance controlling the robot.
+        direction (str): Direction to turn ('left' or 'right').
+        angle (float): Angle to turn in degrees.
+    """
+    if direction == 'left':
+        px.set_dir_servo_angle(angle)
+        px.forward(30)
+    elif direction == 'right':
+        px.set_dir_servo_angle(-angle)
+        px.forward(30)
+
+def move_left(px, speed=30):
+    """
+    Moves the robot to the left.
+    
+    Args:
+        px (Picarx): Instance controlling the robot.
+        speed (int): Motor speed.
+    """
+    px.set_dir_servo_angle(30)
+    px.forward(speed)
+
+def move_right(px, speed=30):
+    """
+    Moves the robot to the right.
+    
+    Args:
+        px (Picarx): Instance controlling the robot.
+        speed (int): Motor speed.
+    """
+    px.set_dir_servo_angle(-30)
+    px.forward(speed)
+
+def move_forward(px, speed=30):
+    """
+    Moves the robot forward.
+    
+    Args:
+        px (Picarx): Instance controlling the robot.
+        speed (int): Motor speed.
+    """
+    px.set_dir_servo_angle(0)
+    px.forward(speed)
+
+def move_backward(px, speed=30):
+    """
+    Moves the robot backward.
+    
+    Args:
+        px (Picarx): Instance controlling the robot.
+        speed (int): Motor speed.
+    """
+    px.set_dir_servo_angle(0)
+    px.backward(speed)
 
 def readLine(white_line=0):
     """
@@ -158,7 +216,8 @@ def go_to_goal(px, cam, goal_id, goal, hit, deg_eps, dist_eps, last_proportional
             hit.x = p_gc[0]
             hit.z = p_gc[2]
 
-            # TODO: Insert code for a turning maneuver.
+            # Insert code for a turning maneuver.
+            turn(px, 'left', 90)
             
             return state, goal, hit, last_proportional, angle_to_goal
         
@@ -195,20 +254,18 @@ def go_to_goal(px, cam, goal_id, goal, hit, deg_eps, dist_eps, last_proportional
                         state = 3
                         return state, goal, hit, last_proportional, angle_to_goal
                     
-                    # ======= TODO =======
                     # Implement robot movements (left, right, forward, etc.) based on conditions
                     # determine which movement method(s) the robot should use to move toward the 
                     # target based on its current position relative to the target.                         
                     #  For example, if zdiff < 0.
                     if zdiff < 0:
-                        pass
+                        move_backward(px)
                     else:
-                        pass
+                        move_forward(px)
                 else:
                         # handle detection of other markers.
                         pass
         else:
-            # ======= TO DO =======
             # robot does not detect the line on the ground or an ArUco marker
             # it checks if it has previously detected an ArUco marker. 
             # If it has, it will continue moving towards the target. 
@@ -219,11 +276,11 @@ def go_to_goal(px, cam, goal_id, goal, hit, deg_eps, dist_eps, last_proportional
             if 'th' in locals():
                 # Use the current heading compared to the goal angle
                 if th - angle_to_goal > 0:
-                    # TODO: Insert code to adjust robot's direction (e.g., slight left turn).
-                    pass
+                    # Insert code to adjust robot's direction (e.g., slight left turn).
+                    turn(px, 'left', 10)
                 else:
-                    # TODO: Insert code to adjust robot's direction (e.g., slight right turn).
-                    pass
+                    # Insert code to adjust robot's direction (e.g., slight right turn).
+                    turn(px, 'right', 10)
             else:
                 # No orientation data available; you may decide to maintain the current course.
                     pass
@@ -262,9 +319,8 @@ def find_leave(px, cam, goal_id, helper1_id, helper2_id, goal, hit, leave, dist_
     count = 0
 
     while True:
-        # ======= TODO =======
         # Insert code here to move the robot backward (for example: move_backward(px)).
-        # =======================
+        move_backward(px)
         
         # Calibration constant for find_leave control loop.
         coef = 2000
@@ -331,14 +387,24 @@ def find_leave(px, cam, goal_id, helper1_id, helper2_id, goal, hit, leave, dist_
                         print("Finished tracking; now going to the leave point")
                         state = 2
                         return state, leave, last_proportional
-                # ======= TODO =======
-                # Add optional handling for helper markers, if needed.
                 elif ids[i] == helper1_id:
-                    # TODO: Insert handling code for helper1 marker.
-                    pass
+                    # Process helper1 marker for additional localization
+                    cv2.aruco.drawAxis(frame, mtx, dist, rvecs[i], tvecs[i], 0.05)
+                    g_ch1 = utils.cvdata2transmtx2(rvecs[i], tvecs[i])[0]
+                    # Calculate position relative to helper1
+                    p_h1c = g_ch1[:, 3]
+                    # Use the helper1 marker to refine the robot's position estimate
+                    robot_pos_from_h1 = np.dot(g_gh1, p_h1c)
+                    print("Position from Helper1: x:{}, z:{}".format(robot_pos_from_h1[0], robot_pos_from_h1[2]))
                 elif ids[i] == helper2_id:
-                    # TODO: Insert handling code for helper2 marker.
-                    pass
+                    # Process helper2 marker for additional localization
+                    cv2.aruco.drawAxis(frame, mtx, dist, rvecs[i], tvecs[i], 0.05)
+                    g_ch2 = utils.cvdata2transmtx2(rvecs[i], tvecs[i])[0]
+                    # Calculate position relative to helper2
+                    p_h2c = g_ch2[:, 3]
+                    # Use the helper2 marker to refine the robot's position estimate
+                    robot_pos_from_h2 = np.dot(g_gh2, p_h2c)
+                    print("Position from Helper2: x:{}, z:{}".format(robot_pos_from_h2[0], robot_pos_from_h2[2]))
         cv2.imshow('aruco', frame)
         if cv2.waitKey(100) & 0xFF == ord('q'):
             cv2.destroyAllWindows()
@@ -370,9 +436,9 @@ def go_to_leave(px, cam, goal_id, helper1_id, helper2_id, goal, leave, dist_eps,
     maximum = 35
 
     while True:
-        # ======= TODO =======
         # Insert command to move the robot backward (e.g., move_backward(px)).
-        # =======================
+        move_backward(px)
+        
         coef = 2000  # Calibration constant.
         
         # Read line
@@ -416,17 +482,28 @@ def go_to_leave(px, cam, goal_id, helper1_id, helper2_id, goal, leave, dist_eps,
                         print("Reached leave point, resuming approach to goal.")
                         # Move forward a few steps after reaching the leave point.
                         for i in range(5):
-                            # ======= TODO =======
                             # Insert call to your forward movement function (e.g., move_forward(px))
-                            pass
+                            move_forward(px)
                         state = 0
                         return state
                 elif ids[i] == helper1_id:
-                    # TODO: Insert handling code for helper1 marker.
-                    pass
+                    # Process helper1 marker for additional localization
+                    cv2.aruco.drawAxis(frame, mtx, dist, rvecs[i], tvecs[i], 0.05)
+                    g_ch1 = utils.cvdata2transmtx2(rvecs[i], tvecs[i])[0]
+                    # Calculate position relative to helper1
+                    p_h1c = g_ch1[:, 3]
+                    # Use the helper1 marker to refine the robot's position estimate
+                    robot_pos_from_h1 = np.dot(g_gh1, p_h1c)
+                    print("Position from Helper1: x:{}, z:{}".format(robot_pos_from_h1[0], robot_pos_from_h1[2]))
                 elif ids[i] == helper2_id:
-                    # TODO: Insert handling code for helper2 marker.
-                    pass
+                    # Process helper2 marker for additional localization
+                    cv2.aruco.drawAxis(frame, mtx, dist, rvecs[i], tvecs[i], 0.05)
+                    g_ch2 = utils.cvdata2transmtx2(rvecs[i], tvecs[i])[0]
+                    # Calculate position relative to helper2
+                    p_h2c = g_ch2[:, 3]
+                    # Use the helper2 marker to refine the robot's position estimate
+                    robot_pos_from_h2 = np.dot(g_gh2, p_h2c)
+                    print("Position from Helper2: x:{}, z:{}".format(robot_pos_from_h2[0], robot_pos_from_h2[2]))
         cv2.imshow('aruco', frame)
         if cv2.waitKey(100) & 0xFF == ord('q'):
             cv2.destroyAllWindows()

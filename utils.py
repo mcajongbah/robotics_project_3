@@ -28,22 +28,16 @@ def cvdata2transmtx(rvec,tvec):
 
 def cvdata2transmtx2(rvec, tvec):
     """
-    Build a 4×4 homogeneous transform from the CAMERA frame into the marker frame,
-    directly computing the inverse of the marker→camera pose.
+    Build a 4×4 homogeneous transform from the marker frame into the camera frame.
+    This represents the pose of the camera as seen from the marker's reference frame.
     """
-    # 1. Convert Rodrigues vector to rotation matrix R (marker→camera)
-    R, _ = cv2.Rodrigues(rvec)
-    # 2. Build the inverse rotation (camera→marker)
-    R_inv = R.T
-    # 3. Compute the inverse translation
+    # Convert Rodrigues vector to rotation matrix (marker→camera)
+    R = cv2.Rodrigues(rvec)[0]
+    # Get the translation vector
     p = tvec.reshape(-1, 1)
-    # p is the translation from the camera to the marker, so we need to invert it
-    p_inv = -R_inv.dot(p)
-    # 4. Assemble into a 4×4 homogeneous matrix
-    T = np.eye(4, dtype=np.float64)
-    T[:3, :3] = R_inv
-    T[:3,  3] = p_inv
-    return T
+    # Assemble into a 4×4 homogeneous matrix
+    g = np.vstack((np.hstack((R, p)), [0, 0, 0, 1]))
+    return g, R, p
 
 def transmtx2twist(g):
     R = g[0:3,0:3]
@@ -81,5 +75,3 @@ print("test",w.dot(w.T))
 print("  v = " + str(v))
 print("  w = " + str(w))
 print("  th = " + str(th))
-
-

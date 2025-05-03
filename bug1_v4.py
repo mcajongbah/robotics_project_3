@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
+import math
+import pickle
+import time
+
 import cv2
 import numpy as np
 import yaml
-import utils
-import math
-import time
-import pickle
-from picarx import Picarx
 from picamera2 import Picamera2
+from picarx import Picarx
+
+import utils
 
 # Initialize the Picarx robot instance.
 px = Picarx()
@@ -209,21 +211,12 @@ def go_to_goal(px, cam, goal_id, goal, hit, deg_eps, dist_eps, last_proportional
         derivative = proportional - last_proportional
         last_proportional = proportional
         
-        # If a sudden derivative change indicates a line hit:
-        if abs(derivative) >= threshold:
-            state = 1
-            print("Hit line detected!")
-            hit.x = p_gc[0]
-            hit.z = p_gc[2]
-
-            # Insert code for a turning maneuver.
-            turn(px, 'left', 90)
-            
-            return state, goal, hit, last_proportional, angle_to_goal
-        
         # Process the frame for ArUco marker detection.
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
+        
+        # Initialize p_gc for potential line hit detection
+        p_gc = None
         
         if corners is not None and len(corners) != 0:
             # Estimate marker pose.
@@ -254,18 +247,41 @@ def go_to_goal(px, cam, goal_id, goal, hit, deg_eps, dist_eps, last_proportional
                         state = 3
                         return state, goal, hit, last_proportional, angle_to_goal
                     
-                    # Implement robot movements (left, right, forward, etc.) based on conditions
-                    # determine which movement method(s) the robot should use to move toward the 
-                    # target based on its current position relative to the target.                         
-                    #  For example, if zdiff < 0.
+                    # Implement robot movements based on conditions
                     if zdiff < 0:
                         move_backward(px)
                     else:
                         move_forward(px)
+                    
+                    # Check for line hit after we have p_gc
+                    if abs(derivative) >= threshold:
+                        state = 1
+                        print("Hit line detected!")
+                        print("Running find_leave")
+                        hit.x = p_gc[0]
+                        hit.z = p_gc[2]
+                        
+                        # Insert code for a turning maneuver.
+                        turn(px, 'left', 90)
+                        
+                        return state, goal, hit, last_proportional, angle_to_goal
                 else:
-                        # handle detection of other markers.
-                        pass
+                    # handle detection of other markers.
+                    pass
         else:
+            # If no markers detected, still check for line hit
+            if abs(derivative) >= threshold and p_gc is not None:
+                state = 1
+                print("Hit line detected!")
+                print("Running find_leave")
+                hit.x = p_gc[0]
+                hit.z = p_gc[2]
+                
+                # Insert code for a turning maneuver.
+                turn(px, 'left', 90)
+                
+                return state, goal, hit, last_proportional, angle_to_goal
+            
             # robot does not detect the line on the ground or an ArUco marker
             # it checks if it has previously detected an ArUco marker. 
             # If it has, it will continue moving towards the target. 
@@ -282,10 +298,11 @@ def go_to_goal(px, cam, goal_id, goal, hit, deg_eps, dist_eps, last_proportional
                     # Insert code to adjust robot's direction (e.g., slight right turn).
                     turn(px, 'right', 10)
             else:
-                # No orientation data available; you may decide to maintain the current course.
-                    pass
+                # No orientation data available; move forward to explore
+                move_forward(px, 25)
+                print("No markers detected, moving forward to explore")
         # Display the annotated frame (for debugging).
-        cv2.imshow('aruco', frame)
+        # cv2.imshow('aruco', frame)
         if cv2.waitKey(100) & 0xFF == ord('q'):
             cv2.destroyAllWindows()
             stop(px)
@@ -319,16 +336,11 @@ def find_leave(px, cam, goal_id, helper1_id, helper2_id, goal, hit, leave, dist_
     count = 0
 
     while True:
-        # Insert code here to move the robot backward (for example: move_backward(px)).
-        move_backward(px)
-        
-        # Calibration constant for find_leave control loop.
-        coef = 2000
-        
         # Read the line sensor position.
         position = readLine()
-        # Calculate the proportional error assuming the desired position is centered at 2000.
-        proportional = position - 2000
+        # Calculate the proportional error assuming the desired position is centered at 1000.
+        # Note: Changed from 2000 to 1000 to center the line better
+        proportional = position - 1000
         
         # Calculate the change in error (derivative).
         derivative = proportional - last_proportional
@@ -341,17 +353,18 @@ def find_leave(px, cam, goal_id, helper1_id, helper2_id, goal, hit, leave, dist_
         if power_difference < -maximum:
             power_difference = -maximum
         
-        # Adjust motor speeds based on computed power difference.
+        # Print sensor values for debugging
+        sensor_values = px.get_grayscale_data()
+        print("sensor values", sensor_values)
+        
+        # Adjust motor speeds based on computed power difference for line following
+        # Instead of just moving backward, we'll follow the line by adjusting left/right
         if power_difference < 0:
-            # NOTE: Depending on your calibration, you may need to swap motor indices.
-            # also you may want to add a steering angle deping on how the robot is able to slip
-            px.set_motor_speed(1, maximum + power_difference)
-            px.set_motor_speed(2, maximum)
+            # Line is to the left, turn left while moving
+            turn(px, 'left', abs(power_difference)/5)  # Scale down the turning angle
         else:
-            # NOTE: Depending on your calibration, you may need to swap motor indices.
-            # also you may want to add a steering angle deping on how the robot is able to slip
-            px.set_motor_speed(1, maximum)
-            px.set_motor_speed(2, maximum - power_difference)
+            # Line is to the right, turn right while moving
+            turn(px, 'right', abs(power_difference)/5)  # Scale down the turning angle
         
         time.sleep(0.05)
         stop(px)
@@ -405,7 +418,7 @@ def find_leave(px, cam, goal_id, helper1_id, helper2_id, goal, hit, leave, dist_
                     # Use the helper2 marker to refine the robot's position estimate
                     robot_pos_from_h2 = np.dot(g_gh2, p_h2c)
                     print("Position from Helper2: x:{}, z:{}".format(robot_pos_from_h2[0], robot_pos_from_h2[2]))
-        cv2.imshow('aruco', frame)
+        # cv2.imshow('aruco', frame)
         if cv2.waitKey(100) & 0xFF == ord('q'):
             cv2.destroyAllWindows()
             stop(px)
@@ -504,7 +517,7 @@ def go_to_leave(px, cam, goal_id, helper1_id, helper2_id, goal, leave, dist_eps,
                     # Use the helper2 marker to refine the robot's position estimate
                     robot_pos_from_h2 = np.dot(g_gh2, p_h2c)
                     print("Position from Helper2: x:{}, z:{}".format(robot_pos_from_h2[0], robot_pos_from_h2[2]))
-        cv2.imshow('aruco', frame)
+        # cv2.imshow('aruco', frame)
         if cv2.waitKey(100) & 0xFF == ord('q'):
             cv2.destroyAllWindows()
             stop(px)
